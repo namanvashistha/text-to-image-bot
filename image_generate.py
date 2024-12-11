@@ -51,8 +51,8 @@ def generate_image(tweet_body, hashtags):
     username_font_path = "fonts/comics_grass.ttf"
 
     username_font_size = 30
-    description_font_size = 55
-    hashtags_font_size = 37
+    description_font_size = 60
+    hashtags_font_size = 45
 
     username_font = ImageFont.truetype(username_font_path, size=username_font_size)
     description_font = ImageFont.truetype(font_path, size=description_font_size)
@@ -62,10 +62,10 @@ def generate_image(tweet_body, hashtags):
     description_text = tweet_body
     hashtags_text = hashtags
 
-    center_x = img.width / 2
     start_x = 150
     center_y = img.height / 2 - 100
 
+    # Wrap the description text
     description_text = description_text.replace("\n", "\n‎")
     description_text_elements = description_text.split("\n")
     description_text_wrapped = []
@@ -78,16 +78,19 @@ def generate_image(tweet_body, hashtags):
         )
         description_text_wrapped.extend(description_text_wrap)
 
+    # Set a fixed line height
+    line_height = description_font_size + 15  # Add a small padding to the font size
+
+    # Calculate positions for each line
     description_positions = []
-    line_size_0 = draw.textsize(description_text_wrapped[0], font=description_font)
+    total_height = len(description_text_wrapped) * line_height
+    start_y = center_y - total_height / 2  # Center the text block vertically
+
     for index, line in enumerate(description_text_wrapped):
-        line_size = draw.textsize(line, font=description_font)
-        line_position = (
-            start_x,
-            center_y - ((len(description_text_wrapped) / 2) - index) * line_size_0[1],
-        )
+        line_position = (start_x, start_y + index * line_height)
         description_positions.append(line_position)
 
+    # Draw description text
     description_color = (229, 222, 211)
     for i, position in enumerate(description_positions):
         draw.text(
@@ -97,26 +100,22 @@ def generate_image(tweet_body, hashtags):
             font=description_font,
         )
 
-    description_start = description_positions[0]
-    description_end = description_positions[len(description_positions) - 1]
-
-    hashtags_size = draw.textsize(hashtags_text, font=hashtags_font)
-    hashtags_position = start_x, description_end[1] + 60 + hashtags_size[1]
-
+    # Draw hashtags
+    description_end = description_positions[-1]
+    hashtags_position = (start_x, description_end[1] + line_height + 10)
     hashtags_color = (53, 76, 124)
     draw.text(hashtags_position, hashtags_text, fill=hashtags_color, font=hashtags_font)
 
-    username_size = draw.textsize(username_text, font=username_font)
-    # username_position = start_x, hashtags_position[1] + 50 + username_size[1]
-    username_position = 900, 1130
+    # Draw username
+    username_position = (900, 1130)
     username_color = (193, 85, 82)
     draw.text(username_position, username_text, fill=username_color, font=username_font)
 
+    # Resize and save the image
     output_size = (1200, 1200)
     img = img.resize(output_size)
     utc_now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    # ist_now = utc_now.astimezone(ist_timezone)
-    image_path = f"data/{utc_now}.png"
+    image_path = f"static/{utc_now}.png"
     img.save(image_path, quality=100)
 
     return image_path
