@@ -7,7 +7,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-WIDTH, HEIGHT = 1080, 1920  # Instagram Reel / Story format
+WIDTH, HEIGHT = 1080, 2340  # iPhone screen ratio (19.5:9)
 
 _HERE = Path(__file__).resolve().parent
 _FONTS_DIR = _HERE / "fonts"
