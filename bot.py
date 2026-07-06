@@ -32,7 +32,7 @@ def bot_handler(message):
             username=os.getenv("IMAGE_USERNAME"),
             timestamp=message.date,
         )
-        bot.send_photo(message.chat.id, io.BytesIO(png))
+        # bot.send_photo(message.chat.id, io.BytesIO(png))
         # Telegram recompresses photos (max ~2560px); document keeps full 2160x4680
         doc = io.BytesIO(png)
         doc.name = "card.png"
