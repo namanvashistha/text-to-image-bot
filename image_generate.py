@@ -122,7 +122,10 @@ def render_png(page_html: str) -> bytes:
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
-            page = browser.new_page(viewport={"width": WIDTH, "height": HEIGHT})
+            page = browser.new_page(
+                viewport={"width": WIDTH, "height": HEIGHT},
+                device_scale_factor=2,  # 2160x4680 output; layout unchanged
+            )
             page.set_content(page_html, wait_until="networkidle")
             return page.screenshot(type="png")
         finally:
