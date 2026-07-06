@@ -33,6 +33,10 @@ def bot_handler(message):
             timestamp=message.date,
         )
         bot.send_photo(message.chat.id, io.BytesIO(png))
+        # Telegram recompresses photos (max ~2560px); document keeps full 2160x4680
+        doc = io.BytesIO(png)
+        doc.name = "card.png"
+        bot.send_document(message.chat.id, doc)
     except Exception:
         logging.exception("failed to render message from chat %s", message.chat.id)
         bot.reply_to(message, "couldn't render that one, try again")
