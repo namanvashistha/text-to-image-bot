@@ -1,0 +1,9 @@
+[project]
+name = "text-to-image-bot"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "playwright>=1.61.0",
+    "pytelegrambotapi>=4.34.0",
+    "python-dotenv>=1.2.2",
+]

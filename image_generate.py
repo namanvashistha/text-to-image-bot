@@ -1,121 +1,129 @@
+import base64
+import html
 import os
 import re
-from PIL import Image, ImageDraw, ImageFont
-import textwrap
 from datetime import datetime
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+WIDTH, HEIGHT = 1080, 1920  # Instagram Reel / Story format
+
+_HERE = Path(__file__).resolve().parent
+_FONTS_DIR = _HERE / "fonts"
 
 
-def text_to_image(text_body):
-    text_body, hashtags = format_text(text_body)
-    image_path = generate_image(text_body, hashtags)
-    return {
-        "text": text_body,
-        "hashtags": hashtags,
-        "image_path": image_path,
-        # "media_id": media,
-    }
+def _font_b64(name: str) -> str:
+    return base64.b64encode((_FONTS_DIR / name).read_bytes()).decode()
 
 
-def format_text(text_body):
-    hashs = re.findall(r"#\w+", text_body)
+_TEMPLATE = (
+    (_HERE / "card_template.html")
+    .read_text()
+    .replace("__CHIRP_B64__", _font_b64("Chirp.ttf"))
+)
 
-    hashtags = []
-    for word in text_body.split()[::-1]:
-        if word in hashs:
-            hashtags.append(word)
-        else:
-            break
-
-    for hash in hashtags:
-        text_body = text_body.replace(hash, "")
-
-    text_body = text_body.strip()
-    hashtags = hashtags[::-1]
-    hashtags = " ".join(hashtags)
-    return text_body, hashtags
+_TRAILING_HASHTAGS = re.compile(r"(?:\s*#\w+)+\s*$")
+_HASHTAG = re.compile(r"#\w+")
 
 
-def generate_image(tweet_body, hashtags):
+def text_to_image(
+    text_body: str,
+    display_name: str | None = None,
+    username: str | None = None,
+    avatar: bytes | None = None,
+    timestamp: int | None = None,
+) -> bytes:
+    """Render a message as a tweet-style 1080x1920 card and return PNG bytes."""
+    body, hashtags = format_text(text_body)
+    page_html = build_html(body, hashtags, display_name, username, avatar, timestamp)
+    return render_png(page_html)
 
-    img = Image.new("RGBA", (1200, 1200), color=(28, 28, 30))
 
-    # background_image_path = "background.png"
-    # background_image = Image.open(background_image_path)
-    # background_image = background_image.convert('RGBA')
-    # background_image = background_image.resize((1200, 1200))
-    # img = Image.alpha_composite(img, background_image)
+def format_text(text_body: str) -> tuple[str, str]:
+    """Split trailing hashtags off the message body."""
+    match = _TRAILING_HASHTAGS.search(text_body)
+    if not match:
+        return text_body.strip(), ""
+    hashtags = " ".join(match.group().split())
+    body = text_body[: match.start()].strip()
+    return body, hashtags
 
-    draw = ImageDraw.Draw(img)
 
-    font_path = "fonts/Chirp.ttf"
-    username_font_path = "fonts/comics_grass.ttf"
+def build_html(
+    body: str,
+    hashtags: str,
+    display_name: str | None,
+    username: str | None,
+    avatar: bytes | None,
+    timestamp: int | None,
+) -> str:
+    escaped = html.escape(body, quote=False)
+    # color hashtags that appear inside the body text
+    body_html = _HASHTAG.sub(lambda m: f'<span class="tag">{m.group()}</span>', escaped)
 
-    username_font_size = 30
-    description_font_size = 60
-    hashtags_font_size = 45
+    name = display_name or username or "anonymous"
 
-    username_font = ImageFont.truetype(username_font_path, size=username_font_size)
-    description_font = ImageFont.truetype(font_path, size=description_font_size)
-    hashtags_font = ImageFont.truetype(font_path, size=hashtags_font_size)
+    if avatar is None:
+        avatar_path = Path(os.getenv("AVATAR_PATH") or _HERE / "avatar.jpg")
+        if avatar_path.is_file():
+            avatar = avatar_path.read_bytes()
 
-    username_text = os.getenv("IMAGE_WATERMARK")
-    description_text = tweet_body
-    hashtags_text = hashtags
+    if avatar:
+        mime = "image/png" if avatar.startswith(b"\x89PNG") else "image/jpeg"
+        avatar_b64 = base64.b64encode(avatar).decode()
+        avatar_block = f'<img class="avatar" src="data:{mime};base64,{avatar_b64}">'
+    else:
+        initial = html.escape(name[0].upper(), quote=False)
+        avatar_block = f'<div class="avatar avatar-fallback">{initial}</div>'
 
-    start_x = 150
-    center_y = img.height / 2 - 100
+    handle_block = (
+        f'<div class="handle">@{html.escape(username, quote=False)}</div>'
+        if username
+        else ""
+    )
 
-    # Wrap the description text
-    description_text = description_text.replace("\n", "\n‎")
-    description_text_elements = description_text.split("\n")
-    description_text_wrapped = []
-    for description_text_element in description_text_elements:
-        description_text_wrap = textwrap.wrap(
-            description_text_element,
-            width=30,
-            replace_whitespace=False,
-            expand_tabs=False,
-        )
-        description_text_wrapped.extend(description_text_wrap)
+    hashtags_block = (
+        f'<div class="hashtags">{html.escape(hashtags, quote=False)}</div>'
+        if hashtags
+        else ""
+    )
 
-    # Set a fixed line height
-    line_height = description_font_size + 15  # Add a small padding to the font size
+    dt = datetime.fromtimestamp(timestamp) if timestamp else datetime.now()
+    time_text = dt.strftime("%-I:%M %p · %b %-d, %Y")
 
-    # Calculate positions for each line
-    description_positions = []
-    total_height = len(description_text_wrapped) * line_height
-    start_y = center_y - total_height / 2  # Center the text block vertically
+    return (
+        _TEMPLATE.replace("__FONT_SIZE__", str(font_size_for(body)))
+        .replace("__AVATAR_BLOCK__", avatar_block)
+        .replace("__NAME__", html.escape(name, quote=False))
+        .replace("__HANDLE_BLOCK__", handle_block)
+        .replace("__BODY__", body_html)
+        .replace("__HASHTAGS_BLOCK__", hashtags_block)
+        .replace("__TIMESTAMP__", time_text)
+    )
 
-    for index, line in enumerate(description_text_wrapped):
-        line_position = (start_x, start_y + index * line_height)
-        description_positions.append(line_position)
 
-    # Draw description text
-    description_color = (229, 222, 211)
-    for i, position in enumerate(description_positions):
-        draw.text(
-            position,
-            description_text_wrapped[i],
-            fill=description_color,
-            font=description_font,
-        )
+def font_size_for(body: str) -> int:
+    n = len(body)
+    if n <= 90:
+        return 62
+    if n <= 180:
+        return 54
+    if n <= 320:
+        return 46
+    if n <= 500:
+        return 40
+    if n <= 900:
+        return 34
+    return 28
 
-    # Draw hashtags
-    description_end = description_positions[-1]
-    hashtags_position = (start_x, description_end[1] + line_height + 10)
-    hashtags_color = (53, 76, 124)
-    draw.text(hashtags_position, hashtags_text, fill=hashtags_color, font=hashtags_font)
 
-    # Draw username
-    username_position = (900, 1130)
-    username_color = (193, 85, 82)
-    draw.text(username_position, username_text, fill=username_color, font=username_font)
-
-    # Resize and save the image
-    output_size = (1200, 1200)
-    img = img.resize(output_size)
-    utc_now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    image_path = f"static/{utc_now}.png"
-    img.save(image_path, quality=100)
-
-    return image_path
+def render_png(page_html: str) -> bytes:
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page(viewport={"width": WIDTH, "height": HEIGHT})
+            page.set_content(page_html, wait_until="networkidle")
+            return page.screenshot(type="png")
+        finally:
+            browser.close()
