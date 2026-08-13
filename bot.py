@@ -29,7 +29,7 @@ def bot_handler(message):
         png = text_to_image(
             message.text,
             display_name=os.getenv("IMAGE_DISPLAY_NAME"),
-            username=os.getenv("IMAGE_USERNAME"),
+            username="tempo" or os.getenv("IMAGE_USERNAME"),
             timestamp=message.date,
         )
         # bot.send_photo(message.chat.id, io.BytesIO(png))
