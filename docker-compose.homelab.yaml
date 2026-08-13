@@ -28,3 +28,7 @@ services:
         required: false
     environment:
       TZ: Asia/Kolkata # card timestamps render in IST, not server UTC
+    # No healthcheck: this is a Telegram long-poller with no listening socket,
+    # so there is no endpoint to probe. A "is PID 1 alive" check would only
+    # restate what Docker already reports. Liveness comes from Komodo's
+    # StackStateChange alert instead.
