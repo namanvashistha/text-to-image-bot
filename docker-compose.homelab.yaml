@@ -1,0 +1,30 @@
+# Deployed compose for the homelab box. Declared as a Komodo stack in
+# namanvashistha/homelab -> komodo/syncs/projects.toml.
+#
+# This is NOT docker-compose.yml. That one is the dev compose: it builds from
+# the Dockerfile and publishes ports to localhost. This one pulls the image
+# this repo's CI publishes to ghcr.io, uses `expose:` rather than `ports:`
+# (ingress is cloudflared -> caddy, so a host port would bypass Cloudflare
+# Access and publish to the LAN), and carries the caddy labels that route
+# text-to-image-bot.namanvashistha.com.
+#
+# Komodo clones this repo to /etc/komodo/stacks/text-to-image-bot/ and runs compose there
+# under the project name `text-to-image-bot` — which is what the volumes below are prefixed
+# with. Renaming the stack renames the volumes and detaches the data silently.
+
+services:
+  bot:
+    image: ghcr.io/namanvashistha/text-to-image-bot:latest
+    restart: unless-stopped
+    # Komodo writes this file into the run directory before compose runs, from
+    # the `environment` block on this stack in ../komodo/syncs/projects.toml.
+    # Komodo writes this from the stack's `environment` block in
+    # homelab/komodo/syncs/projects.toml, into the run directory, before
+    # compose runs. required:false because it does not exist in a plain
+    # checkout — only in Komodo's run directory — and `compose config`
+    # fails on a missing env_file otherwise.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: Asia/Kolkata # card timestamps render in IST, not server UTC
